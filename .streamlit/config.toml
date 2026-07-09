@@ -1,0 +1,13 @@
+# Native Streamlit theme — matches theme.py (Bloomberg-terminal look).
+# Controls widgets Python CSS can't fully reach: slider fills, checkboxes,
+# the date-picker, focus rings, radio buttons, and the text cursor.
+[theme]
+base = "dark"
+primaryColor = "#ff9e1b"
+backgroundColor = "#08090c"
+secondaryBackgroundColor = "#101319"
+textColor = "#f2f5fa"
+font = "monospace"
+
+[browser]
+gatherUsageStats = false
