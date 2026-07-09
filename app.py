@@ -87,8 +87,19 @@ with st.sidebar:
             shock_bp = st.slider("Shock magnitude (bps)", 10, 200, 50, 5)
             pivot = st.slider("Steepener/flattener pivot (Y)", 2, 15, 5, 1)
             fly_center = st.slider("Butterfly center (Y)", 2, 20, 7, 1)
-            st.caption("Drives the classic deformations on *Scenarios* "
+            st.caption("Drives the classic deformations on *Scenarios* — and the "
+                       "P&L scenarios on *Rates Risk* "
                        "(parallel, steepener, flattener, butterfly).")
+
+        with st.expander("Bond (Rates Risk)"):
+            coupon = st.slider("Coupon (%)", 0.0, 10.0, 4.0, 0.25)
+            bond_mat = st.slider("Maturity (Y)", 0.5, 30.0, 10.0, 0.5)
+            notional = st.select_slider(
+                "Notional ($)", [100_000, 250_000, 500_000, 1_000_000, 5_000_000,
+                                 10_000_000], 1_000_000)
+            st.caption("The bond priced off the curve on *Rates Risk*, where its "
+                       "**duration, DV01, convexity, key-rate DV01** and "
+                       "**scenario P&L** are computed. Semiannual coupons.")
 
         submitted = st.form_submit_button("▶  Run analysis", use_container_width=True)
 
@@ -175,9 +186,10 @@ def how_to_read(key):
         st.markdown(C.HOW_TO_READ[key])
 
 
-tab_guide, tab_curve, tab_hist, tab_fwd, tab_pca, tab_mr, tab_infl, tab_scen = st.tabs(
+(tab_guide, tab_curve, tab_hist, tab_fwd, tab_pca, tab_mr, tab_infl, tab_scen,
+ tab_rates) = st.tabs(
     ["📖 Guide", "📈 Curve", "🌐 History", "🔮 Forwards", "🧬 Factors (PCA)",
-     "📉 Mean Reversion", "💰 Inflation", "⚡ Scenarios"])
+     "📉 Mean Reversion", "💰 Inflation", "⚡ Scenarios", "⚖️ Rates Risk"])
 
 # ---- Guide -----------------------------------------------------------------
 with tab_guide:
@@ -410,3 +422,56 @@ with tab_scen:
                 unsafe_allow_html=True)
     st.plotly_chart(charts.shock_profile_chart(mats, shocks), use_container_width=True)
     how_to_read("scenarios")
+
+# ---- Rates Risk ------------------------------------------------------------
+with tab_rates:
+    risk = A.bond_risk(latest, coupon, bond_mat, notional, freq=2, kind=interp_kind)
+    st.markdown('<div class="section-tag">Bond risk · duration · DV01 · convexity</div>',
+                unsafe_allow_html=True)
+    st.caption(f"A **{coupon:.2f}%** semiannual bond maturing in **{bond_mat:g}Y**, "
+               f"**${notional:,.0f}** notional, priced off the current curve "
+               "(treated as a continuously-compounded zero curve). All measures are "
+               "computed by bump-and-reprice.")
+    cards = [
+        T.kpi_card("Price", f"{risk['per100']:.2f}",
+                   f"per 100 · ${risk['price']:,.0f}", T.GREEN),
+        T.kpi_card("Mod. duration", f"{risk['mod_duration']:.2f}", "years", T.BLUE),
+        T.kpi_card("DV01", f"${risk['dv01']:,.0f}", "per 1bp move", T.ACCENT),
+        T.kpi_card("Convexity", f"{risk['convexity']:.1f}", "2nd-order", T.PURPLE),
+    ]
+    st.markdown('<div class="kpi-row">' + "".join(cards) + "</div>",
+                unsafe_allow_html=True)
+
+    st.markdown('<div class="section-tag">Price vs yield — convexity</div>',
+                unsafe_allow_html=True)
+    shifts, prices, dur_line, _ = A.price_yield_profile(
+        latest, coupon, bond_mat, notional, kind=interp_kind)
+    st.plotly_chart(charts.price_yield_chart(shifts, prices, dur_line, risk, notional),
+                    use_container_width=True)
+    how_to_read("price_yield")
+
+    st.markdown('<div class="section-tag">Key-rate DV01 — where the risk sits</div>',
+                unsafe_allow_html=True)
+    krd = A.key_rate_dv01(latest, coupon, bond_mat, notional, kind=interp_kind)
+    st.plotly_chart(charts.key_rate_chart(krd), use_container_width=True)
+    how_to_read("key_rate")
+
+    st.markdown('<div class="section-tag">Scenario P&L</div>', unsafe_allow_html=True)
+    shocks_r = A.shock_profiles(latest["Maturity (Years)"].values, shock_bp / 100.0,
+                                pivot=float(pivot), butterfly_center=float(fly_center))
+    _, pnl_rows = A.scenario_bond_pnl(latest, shocks_r, coupon, bond_mat, notional,
+                                      kind=interp_kind, risk=risk)
+    st.plotly_chart(charts.scenario_pnl_chart(pnl_rows), use_container_width=True)
+    par = next((r for r in pnl_rows if r["approx"]), None)
+    if par:
+        a = par["approx"]
+        st.markdown(T.signal_box(
+            "Why convexity matters",
+            f"Under <b>{par['scenario']}</b> the bond's exact P&L is "
+            f"<b>${par['pnl']:+,.0f}</b>. Duration alone predicts "
+            f"<b>${a['dur_only']:+,.0f}</b>; adding convexity gives "
+            f"<b>${a['dur_cvx']:+,.0f}</b> — almost exact. Convexity is the "
+            "curvature duration misses, and it always works in the holder's "
+            "favour: gains a little bigger, losses a little smaller.",
+            accent=T.PURPLE), unsafe_allow_html=True)
+    how_to_read("scenario_pnl")

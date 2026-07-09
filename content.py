@@ -61,6 +61,7 @@ into a structured, measurable view.
 | 📉 **Mean Reversion** | Spread vs its mean ±1σ/±2σ, z-score, half-life | Rich/cheap vs history + the pull back |
 | 💰 **Inflation** (US) | Nominal / Real / Breakeven | The inflation the market is pricing |
 | ⚡ **Scenarios** | Parallel / steepener / flattener / butterfly | Manual stress test of a curve view |
+| ⚖️ **Rates Risk** | Duration / DV01 / convexity, key-rate DV01, scenario P&L | The €/$ risk of a bond to curve moves |
 
 ---
 
@@ -167,5 +168,29 @@ shows the shock (bps) each applies per maturity.
 belly moves against the wings.
 **Params:** *magnitude* = size · *pivot* = where steepener/flattener rotates ·
 *butterfly center* = where the belly sits.
+""",
+    "price_yield": """
+**Shows:** the bond's value as the whole curve shifts in parallel (green,
+curved) vs the straight-line **duration estimate** (dashed).
+**Read it as:** the gap between the two *is* **convexity**. The real price line
+bows above the straight one — so duration overstates losses and understates
+gains. Bigger gap = more convexity.
+""",
+    "key_rate": """
+**Shows:** the DV01 (P&L per 1bp) coming from a bump at *each* maturity pillar —
+the bars sum to the total DV01.
+**Read it as:** *where* on the curve the bond's rate risk lives. A plain bond
+concentrates almost all of it at its maturity; the shape matters once you hold
+several bonds. This is what makes a position sensitive to twists, not just
+parallel moves.
+""",
+    "scenario_pnl": """
+**Shows:** the bond's exact reprice P&L under each curve shock (green = gain,
+red = loss).
+**Read it as:** the euro/dollar impact of each move — parallel shifts hit
+hardest for a single bond, twists (steepener/flattener/butterfly) much less. The
+note below shows how duration + convexity reproduce the parallel move almost
+exactly.
+**Params:** shock *magnitude / pivot / butterfly center* (sidebar).
 """,
 }

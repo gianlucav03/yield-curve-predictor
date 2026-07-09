@@ -37,6 +37,7 @@ Together they turn "I think rates will fall" into a structured, measurable view.
 - **📉 Mean Reversion** — z-score and mean-reversion half-life for the key spreads.
 - **💰 Inflation** (US) — Nominal / Real (TIPS) / **Breakeven inflation** vs the 2% target.
 - **⚡ Scenarios** — classic curve deformations (parallel, steepener, flattener, butterfly).
+- **⚖️ Rates Risk** — price a configurable bond off the curve and get its **duration, DV01, convexity, key-rate DV01** and **scenario P&L**, with the duration-vs-convexity approximation made explicit.
 - **📖 Guide** — an in-app guide + "how to read this" notes on every chart, so a non-specialist can use it.
 
 ## Data

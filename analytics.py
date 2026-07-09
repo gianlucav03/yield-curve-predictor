@@ -532,3 +532,114 @@ def shock_profiles(maturities, magnitude, pivot=5.0, butterfly_center=7.0):
         "Flattener": -magnitude * (t - pivot) / 25.0,
         "Butterfly": magnitude * (1 - 2 * np.exp(-0.5 * ((t - butterfly_center) / 5.0) ** 2)),
     }
+
+
+# ===========================================================================
+# Bond risk analytics — duration, DV01, convexity, key-rate DV01, scenario P&L
+# ===========================================================================
+# The fitted/observed curve is treated as a continuously-compounded zero curve
+# for discounting — a standard teaching simplification. Every risk measure is
+# computed numerically (bump-and-reprice), which is how desks handle non-trivial
+# instruments and non-parallel curve moves alike.
+
+DEFAULT_NOTIONAL = 1_000_000.0
+_BP = 0.0001  # one basis point, in decimal yield
+
+
+def _cashflow_times(maturity, freq):
+    """Coupon dates (years), anchored so the last one lands exactly on maturity."""
+    n = max(1, int(round(maturity * freq)))
+    t = np.array([maturity - i / freq for i in range(n)])[::-1]
+    return t[t > 1e-9]
+
+
+def _interp_from(curve_df, delta, kind="linear"):
+    """Interpolator for the curve shifted by a per-maturity delta (in %)."""
+    df = curve_df.copy()
+    df["Yield (%)"] = df["Yield (%)"].values + np.asarray(delta, dtype=float)
+    f, _, _ = make_interpolator(df, kind)
+    return f
+
+
+def price_bond(interp, coupon, maturity, notional=DEFAULT_NOTIONAL, freq=2, shift=0.0):
+    """Price a fixed-coupon bond off the curve. `coupon` in %, `shift` in
+    percentage points added to every zero rate. Continuous-compounding discount."""
+    times = _cashflow_times(maturity, freq)
+    if len(times) == 0:
+        return float(notional)
+    cpn = coupon / 100.0 * notional / freq
+    y = (np.array([float(interp(t)) for t in times]) + shift) / 100.0
+    df = np.exp(-y * times)
+    cf = np.full(len(times), cpn)
+    cf[-1] += notional
+    return float(np.sum(cf * df))
+
+
+def bond_risk(curve_df, coupon, maturity, notional=DEFAULT_NOTIONAL, freq=2, kind="linear"):
+    """Price + effective (numerical) Modified Duration, DV01 and Convexity."""
+    interp, _, _ = make_interpolator(curve_df, kind)
+    p0 = price_bond(interp, coupon, maturity, notional, freq, 0.0)
+    p_up = price_bond(interp, coupon, maturity, notional, freq, +0.01)   # +1bp
+    p_dn = price_bond(interp, coupon, maturity, notional, freq, -0.01)   # -1bp
+    dv01 = (p_dn - p_up) / 2.0
+    mod_dur = dv01 / (p0 * _BP) if p0 else float("nan")
+    convexity = (p_up + p_dn - 2 * p0) / (p0 * _BP ** 2) if p0 else float("nan")
+    return dict(price=p0, per100=p0 / notional * 100, dv01=dv01,
+                mod_duration=mod_dur, convexity=convexity)
+
+
+def price_yield_profile(curve_df, coupon, maturity, notional=DEFAULT_NOTIONAL,
+                        freq=2, kind="linear", span_bp=200, n=41):
+    """Price as a function of a parallel yield shift, plus the duration-only
+    tangent — the gap between them *is* convexity. Shifts returned in bp."""
+    interp, _, _ = make_interpolator(curve_df, kind)
+    risk = bond_risk(curve_df, coupon, maturity, notional, freq, kind)
+    shifts = np.linspace(-span_bp, span_bp, n)
+    prices = np.array([price_bond(interp, coupon, maturity, notional, freq, s / 100.0)
+                       for s in shifts])
+    dur_line = risk["price"] - risk["dv01"] * shifts  # DV01 per 1bp × shift(bp)
+    return shifts, prices, dur_line, risk
+
+
+def key_rate_dv01(curve_df, coupon, maturity, notional=DEFAULT_NOTIONAL,
+                  freq=2, kind="linear"):
+    """DV01 attributable to a 1bp bump at each maturity pillar (they sum to the
+    total DV01). Returns [(maturity, key_rate_dv01_$)]."""
+    interp0, _, _ = make_interpolator(curve_df, kind)
+    p0 = price_bond(interp0, coupon, maturity, notional, freq)
+    mats = curve_df["Maturity (Years)"].values.astype(float)
+    out = []
+    for i in range(len(mats)):
+        delta = np.zeros(len(mats))
+        delta[i] = 0.01  # +1bp at pillar i only
+        p_up = price_bond(_interp_from(curve_df, delta, kind),
+                          coupon, maturity, notional, freq)
+        out.append((mats[i], p0 - p_up))  # $ P&L for a 1bp rise at that pillar
+    return out
+
+
+def scenario_bond_pnl(curve_df, shocks, coupon, maturity,
+                      notional=DEFAULT_NOTIONAL, freq=2, kind="linear", risk=None):
+    """Exact reprice P&L of the bond under each curve shock. For the parallel
+    shocks it also returns the duration-only and duration+convexity estimates so
+    the second-order (convexity) correction is visible. Returns (p0, rows)."""
+    interp0, _, _ = make_interpolator(curve_df, kind)
+    p0 = price_bond(interp0, coupon, maturity, notional, freq)
+    if risk is None:
+        risk = bond_risk(curve_df, coupon, maturity, notional, freq, kind)
+    rows = []
+    for name, delta in shocks.items():
+        delta = np.asarray(delta, dtype=float)
+        p_s = price_bond(_interp_from(curve_df, delta, kind),
+                         coupon, maturity, notional, freq)
+        exact = p_s - p0
+        approx = None
+        # Duration+convexity approximation only makes sense for a parallel move.
+        if np.allclose(delta, delta[0]):
+            dy = delta[0] / 100.0  # decimal
+            dur_only = -risk["mod_duration"] * p0 * dy
+            dur_cvx = dur_only + 0.5 * risk["convexity"] * p0 * dy ** 2
+            approx = dict(dur_only=dur_only, dur_cvx=dur_cvx)
+        rows.append(dict(scenario=name, pnl=exact,
+                         pnl_pct=exact / p0 * 100 if p0 else 0.0, approx=approx))
+    return p0, rows

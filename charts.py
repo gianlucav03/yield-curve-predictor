@@ -368,3 +368,60 @@ def shock_profile_chart(maturities, shocks):
     fig.update_xaxes(title="Maturity (Years)")
     fig.update_yaxes(title="Shock (bps)")
     return fig
+
+
+# ---------------------------------------------------------------------------
+# Rates risk (duration / DV01 / convexity / key-rate / scenario P&L)
+# ---------------------------------------------------------------------------
+def price_yield_chart(shifts, prices, dur_line, risk, notional):
+    """Price vs a parallel yield shift (curved) plus the duration-only tangent.
+    The gap between the two is convexity."""
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=shifts, y=dur_line, mode="lines", name="Duration estimate",
+        line=dict(color=T.MUTED, width=1.6, dash="dash"),
+        hovertemplate="%{x:+.0f} bp: %{y:,.0f}<extra>Duration</extra>"))
+    fig.add_trace(go.Scatter(
+        x=shifts, y=prices, mode="lines", name="Actual price (reprice)",
+        line=dict(color=T.GREEN, width=2.4),
+        hovertemplate="%{x:+.0f} bp: %{y:,.0f}<extra>Reprice</extra>"))
+    fig.add_trace(go.Scatter(
+        x=[0], y=[risk["price"]], mode="markers", name="Today",
+        marker=dict(size=10, color=T.ACCENT, line=dict(color=T.BG, width=1)),
+        hovertemplate="Today: %{y:,.0f}<extra></extra>"))
+    fig = T.base_layout(fig, height=420)
+    fig.update_layout(legend=dict(x=0.5, y=0.99, xanchor="center",
+                                  bgcolor="rgba(20,26,36,0.6)"))
+    fig.update_xaxes(title="Parallel yield shift (bp)", zeroline=True)
+    fig.update_yaxes(title="Bond value")
+    return fig
+
+
+def key_rate_chart(krd):
+    """DV01 attributable to each maturity pillar (where the rate risk sits)."""
+    mats = [f"{m*12:.0f}M" if m < 1 else f"{m:.0f}Y" for m, _ in krd]
+    vals = [v for _, v in krd]
+    fig = go.Figure(go.Bar(
+        x=mats, y=vals, marker_color=T.BLUE,
+        hovertemplate="%{x}: %{y:,.0f} per bp<extra>Key-rate DV01</extra>"))
+    fig = T.base_layout(fig, height=360, legend=False)
+    fig.update_xaxes(title="Maturity pillar")
+    fig.update_yaxes(title="Key-rate DV01 (per 1bp)")
+    return fig
+
+
+def scenario_pnl_chart(rows):
+    """P&L of the bond under each curve shock scenario."""
+    names = [r["scenario"] for r in rows]
+    pnls = [r["pnl"] for r in rows]
+    colors = [T.GREEN if p >= 0 else T.RED for p in pnls]
+    fig = go.Figure(go.Bar(
+        x=names, y=pnls, marker_color=colors,
+        text=[f"{p:+,.0f}" for p in pnls], textposition="outside",
+        textfont=dict(family=T.FONT, color=T.TEXT, size=11),
+        hovertemplate="%{x}: %{y:+,.0f}<extra>P&L</extra>"))
+    fig.add_hline(y=0, line=dict(color=T.BORDER, width=1))
+    fig = T.base_layout(fig, height=380, legend=False)
+    fig.update_xaxes(title="Scenario")
+    fig.update_yaxes(title="P&L")
+    return fig
