@@ -2,7 +2,7 @@
 
 **A Bloomberg-style workbench for reading and forecasting the term structure of interest rates.**
 
-The yield curve is the single most information-dense chart in markets — it prices, all at once, what the market expects for **policy rates, growth, inflation and recession**. This tool pulls those expectations out of live US Treasury and Euro-area curves and layers on the models used to *forecast how the curve moves*.
+The yield curve is the single most information-dense chart in markets — it prices, all at once, what the market expects for **policy rates, growth, inflation and recession**. This tool pulls those expectations out of live US Treasury, euro-area and Japanese government curves and layers on the models used to *forecast how the curve moves*.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-3d9bff?logo=python&logoColor=white" alt="Python">
@@ -44,6 +44,7 @@ Together they turn "I think rates will fall" into a structured, measurable view.
 
 - **US Treasury** (nominal, TIPS) and **NBER recessions** — [FRED](https://fred.stlouisfed.org/).
 - **Euro-area AAA government curve** — [ECB Data Portal](https://data.ecb.europa.eu/).
+- **Japan Government Bonds (JGB)**, 1Y–40Y since 1974 — [Ministry of Finance](https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/).
 - Free, no API key. Nothing is fabricated: missing values are shown, never invented.
 
 ## Tech stack

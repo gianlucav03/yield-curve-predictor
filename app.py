@@ -55,7 +55,8 @@ with st.sidebar:
         country_label = st.selectbox("Market", list(COUNTRY_LABELS.keys()))
         st.caption("Which sovereign curve to analyze. **US** (FRED) adds TIPS "
                    "breakevens and NBER recession bands; **Euro Area AAA** (ECB) "
-                   "is the nominal curve only. Changing this refetches everything.")
+                   "and **Japan** (JGB, MOF) are nominal-only. Changing this "
+                   "refetches everything.")
         country = COUNTRY_LABELS[country_label]
 
         hist_years = st.slider("History (years)", 2, 25, 8, 1)
@@ -95,8 +96,8 @@ with st.sidebar:
             coupon = st.slider("Coupon (%)", 0.0, 10.0, 4.0, 0.25)
             bond_mat = st.slider("Maturity (Y)", 0.5, 30.0, 10.0, 0.5)
             notional = st.select_slider(
-                "Notional ($)", [100_000, 250_000, 500_000, 1_000_000, 5_000_000,
-                                 10_000_000], 1_000_000)
+                "Notional", [100_000, 250_000, 500_000, 1_000_000, 5_000_000,
+                             10_000_000], 1_000_000)
             st.caption("The bond priced off the curve on *Rates Risk*, where its "
                        "**duration, DV01, convexity, key-rate DV01** and "
                        "**scenario P&L** are computed. Semiannual coupons.")
@@ -425,18 +426,19 @@ with tab_scen:
 
 # ---- Rates Risk ------------------------------------------------------------
 with tab_rates:
+    ccy = {"USD": "$", "EUR": "€", "JPY": "¥"}.get(meta["currency"], "")
     risk = A.bond_risk(latest, coupon, bond_mat, notional, freq=2, kind=interp_kind)
     st.markdown('<div class="section-tag">Bond risk · duration · DV01 · convexity</div>',
                 unsafe_allow_html=True)
     st.caption(f"A **{coupon:.2f}%** semiannual bond maturing in **{bond_mat:g}Y**, "
-               f"**${notional:,.0f}** notional, priced off the current curve "
+               f"**{ccy}{notional:,.0f}** notional, priced off the current curve "
                "(treated as a continuously-compounded zero curve). All measures are "
                "computed by bump-and-reprice.")
     cards = [
         T.kpi_card("Price", f"{risk['per100']:.2f}",
-                   f"per 100 · ${risk['price']:,.0f}", T.GREEN),
+                   f"per 100 · {ccy}{risk['price']:,.0f}", T.GREEN),
         T.kpi_card("Mod. duration", f"{risk['mod_duration']:.2f}", "years", T.BLUE),
-        T.kpi_card("DV01", f"${risk['dv01']:,.0f}", "per 1bp move", T.ACCENT),
+        T.kpi_card("DV01", f"{ccy}{risk['dv01']:,.0f}", "per 1bp move", T.ACCENT),
         T.kpi_card("Convexity", f"{risk['convexity']:.1f}", "2nd-order", T.PURPLE),
     ]
     st.markdown('<div class="kpi-row">' + "".join(cards) + "</div>",
@@ -468,9 +470,9 @@ with tab_rates:
         st.markdown(T.signal_box(
             "Why convexity matters",
             f"Under <b>{par['scenario']}</b> the bond's exact P&L is "
-            f"<b>${par['pnl']:+,.0f}</b>. Duration alone predicts "
-            f"<b>${a['dur_only']:+,.0f}</b>; adding convexity gives "
-            f"<b>${a['dur_cvx']:+,.0f}</b> — almost exact. Convexity is the "
+            f"<b>{ccy}{par['pnl']:+,.0f}</b>. Duration alone predicts "
+            f"<b>{ccy}{a['dur_only']:+,.0f}</b>; adding convexity gives "
+            f"<b>{ccy}{a['dur_cvx']:+,.0f}</b> — almost exact. Convexity is the "
             "curvature duration misses, and it always works in the holder's "
             "favour: gains a little bigger, losses a little smaller.",
             accent=T.PURPLE), unsafe_allow_html=True)

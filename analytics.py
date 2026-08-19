@@ -77,6 +77,15 @@ COUNTRIES = {
         "tips": None,
         "recession": None,
     },
+    "JP": {
+        "label": "Japan",
+        "curve_name": "Japan JGB",
+        "provider": "mof",     # single CSV with all maturities (see _build_mof)
+        "currency": "JPY",
+        "nominal": None,
+        "tips": None,
+        "recession": None,
+    },
 }
 
 
@@ -94,6 +103,10 @@ ECB_URL = "https://data-api.ecb.europa.eu/service/data/YC"
 # ECB AAA spot-rate series key template (flowRef=YC is in the base URL):
 #   B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y  -> Euro area AAA, 10-year spot rate.
 ECB_KEY = "B.U2.EUR.4F.G_N_A.SV_C_YM.{code}"
+# Japan MOF — one CSV with the full daily JGB curve (1Y..40Y) since 1974.
+# Shift-JIS encoded; title row then a Date,1Y,...,40Y header; "-" marks missing.
+MOF_URL = ("https://www.mof.go.jp/english/policy/jgbs/reference/"
+           "interest_rate/historical/jgbcme_all.csv")
 
 # NB: do NOT set a custom/browser-like User-Agent. FRED's WAF (fredgraph.csv)
 # tarpits requests whose UA is a custom string or a browser string ("Mozilla…")
@@ -195,6 +208,40 @@ def _build_from_map(provider, series_map, start, end):
     return wide, missing
 
 
+def _build_mof(start, end, retries=2):
+    """Fetch Japan's full JGB curve from the MOF CSV → wide DataFrame
+    (date index, maturity-in-years columns), filtered to [start, end]."""
+    for attempt in range(retries):
+        try:
+            r = _get(MOF_URL, timeout=30)
+            if r.status_code == 200 and len(r.content) > 1000:
+                txt = r.content.decode("shift_jis", "ignore")
+                df = pd.read_csv(StringIO(txt), skiprows=1)  # row 0 is a title
+                df = df.rename(columns={df.columns[0]: "Date"})
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+                df = df.dropna(subset=["Date"]).set_index("Date")
+                # "1Y".."40Y" -> float years; "-" (missing) -> NaN
+                colmap = {}
+                for c in df.columns:
+                    try:
+                        colmap[c] = float(str(c).upper().replace("Y", "").strip())
+                    except ValueError:
+                        pass
+                df = df[list(colmap)].rename(columns=colmap)
+                df = df.apply(pd.to_numeric, errors="coerce").sort_index()
+                df = df.loc[(df.index >= pd.Timestamp(start)) &
+                            (df.index <= pd.Timestamp(end))]
+                df = df.dropna(how="all").sort_index(axis=1)
+                if not df.empty:
+                    return df
+        except Exception:
+            pass
+        time.sleep(1.0)
+    raise DataUnavailable(
+        "Japan MOF isn't responding (temporary outage). Wait a minute and press "
+        "Run again.")
+
+
 def build_curve(country, start, end):
     """Fetch the full nominal curve history for a country.
 
@@ -203,7 +250,10 @@ def build_curve(country, start, end):
     (years) columns.
     """
     meta = country_meta(country)
-    wide, _ = _build_from_map(meta["provider"], meta["nominal"], start, end)
+    if meta["provider"] == "mof":
+        wide = _build_mof(start, end)
+    else:
+        wide, _ = _build_from_map(meta["provider"], meta["nominal"], start, end)
     wide = wide.dropna(how="all")
     if wide.empty:
         raise DataUnavailable("No curve observations in the requested window.")

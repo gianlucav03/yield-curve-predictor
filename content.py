@@ -66,7 +66,7 @@ into a structured, measurable view.
 ---
 
 ### Data & honesty
-- **US** curve from **FRED** (Treasury nominal + TIPS + NBER recessions); **Euro Area AAA** from the **ECB Data Portal** (nominal only).
+- **US** curve from **FRED** (Treasury nominal + TIPS + NBER recessions); **Euro Area AAA** from the **ECB Data Portal**; **Japan** (JGB) from the **Ministry of Finance** — the last two are nominal-only.
 - Nothing is fabricated: a missing value shows "—" or a named error.
 - Forwards and mean reversion are **expectations / tendencies**, never guarantees.
 """
